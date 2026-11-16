@@ -236,13 +236,13 @@
                         Gửi thử tin nhắn (Publish)
                     </h2>
                     <button type="button" id="fill-sample-json" class="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-medium">
-                        Điền JSON mẫu
+                        Điền lệnh LED mẫu
                     </button>
                 </div>
 
                 <form id="publish-form" class="space-y-3">
                     <div class="flex gap-2">
-                        <input type="text" id="pub-topic" placeholder="Topic nhận (VD: sensor/nhietdo)" required
+                        <input type="text" id="pub-topic" placeholder="Topic nhận (VD: esp32c/control)" required
                             class="flex-1 min-w-0 px-3.5 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-amber-500 outline-none font-mono">
                         <select id="pub-qos" class="px-2.5 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 outline-none font-medium">
                             <option value="0">QoS 0</option>
@@ -256,26 +256,125 @@
                             class="w-full px-3.5 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-amber-500 outline-none font-mono resize-y"></textarea>
                     </div>
 
-                    <div class="flex items-center justify-between gap-2">
-                        <label class="inline-flex items-center gap-2 cursor-pointer text-xs text-slate-600 dark:text-slate-400 select-none">
-                            <input type="checkbox" id="pub-retain" class="rounded text-amber-500 focus:ring-amber-500 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700">
-                            <span>Retain (Lưu giữ tin)</span>
-                        </label>
-                        <button type="submit" id="btn-publish" disabled
-                            class="py-2 px-5 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:pointer-events-none active:scale-[0.99] text-white font-medium text-sm shadow-sm transition-all flex items-center gap-1.5">
-                            <span>Gửi đi</span>
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+        <!-- CỘT PHẢI: DASHBOARD ESP32-C & LIVE MESSAGE FEED -->
+        <div class="lg:col-span-8 xl:col-span-8 flex flex-col gap-6">
+            
+            <!-- KHU VỰC DASHBOARD ĐIỀU KHIỂN & GIÁM SÁT ESP32-C -->
+            <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                
+                <!-- Thẻ 1: Nhiệt độ -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex flex-col justify-between relative overflow-hidden">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Nhiệt độ</p>
+                            <div class="flex items-baseline gap-1 mt-1">
+                                <span id="dash-temp" class="text-3xl font-bold tracking-tight text-slate-800 dark:text-white">--.-</span>
+                                <span class="text-sm font-semibold text-rose-500">°C</span>
+                            </div>
+                        </div>
+                        <div class="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-500 flex items-center justify-center shrink-0">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"></path>
                             </svg>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div id="dash-temp-bar" class="h-full bg-gradient-to-r from-amber-400 to-rose-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <p id="dash-temp-time" class="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 truncate">Chờ dữ liệu...</p>
+                    </div>
+                </div>
+
+                <!-- Thẻ 2: Độ ẩm -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex flex-col justify-between relative overflow-hidden">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Độ ẩm không khí</p>
+                            <div class="flex items-baseline gap-1 mt-1">
+                                <span id="dash-humi" class="text-3xl font-bold tracking-tight text-slate-800 dark:text-white">--.-</span>
+                                <span class="text-sm font-semibold text-sky-500">%</span>
+                            </div>
+                        </div>
+                        <div class="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-sky-500 flex items-center justify-center shrink-0">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div id="dash-humi-bar" class="h-full bg-gradient-to-r from-cyan-400 to-sky-600 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <p id="dash-humi-time" class="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 truncate">Chờ dữ liệu...</p>
+                    </div>
+                </div>
+
+                <!-- Thẻ 3: Thông số thiết bị ESP32-C -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex flex-col justify-between">
+                    <div class="flex items-start justify-between">
+                        <div class="min-w-0">
+                            <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Thiết bị</p>
+                            <p id="dash-device" class="text-base font-bold text-slate-800 dark:text-white truncate mt-1">ESP32-C3</p>
+                        </div>
+                        <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-500 flex items-center justify-center shrink-0">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                        <div class="flex items-center gap-1 text-slate-600 dark:text-slate-300" title="Cường độ tín hiệu Wi-Fi">
+                            <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0"></path>
+                            </svg>
+                            <span id="dash-rssi" class="font-mono font-medium">-- dBm</span>
+                        </div>
+                        <div class="flex items-center gap-1 text-slate-500 dark:text-slate-400" title="Thời gian hoạt động (Uptime)">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span id="dash-uptime" class="font-mono">--s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Thẻ 4: Điều khiển LED 2 chiều -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex flex-col justify-between">
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Đèn LED Onboard</p>
+                            <div class="flex items-center gap-2 mt-1.5">
+                                <span id="led-indicator-dot" class="w-3 h-3 rounded-full bg-slate-400 transition-all duration-300"></span>
+                                <span id="led-status-label" class="text-sm font-bold text-slate-600 dark:text-slate-300">ĐANG TẮT</span>
+                            </div>
+                        </div>
+
+                        <!-- Công tắc gạt (Toggle Switch) -->
+                        <label class="relative inline-flex items-center cursor-pointer select-none mt-0.5" title="Gạt để Bật/Tắt LED">
+                            <input type="checkbox" id="led-toggle-switch" class="sr-only peer">
+                            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-amber-400 dark:peer-focus:ring-amber-500 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-amber-500"></div>
+                        </label>
+                    </div>
+
+                    <!-- Nút bấm nhanh Bật / Tắt -->
+                    <div class="mt-3 grid grid-cols-2 gap-2">
+                        <button type="button" id="btn-led-on"
+                            class="py-1.5 px-2.5 rounded-xl text-xs font-semibold bg-amber-500/10 hover:bg-amber-500 text-amber-600 dark:text-amber-400 hover:text-white border border-amber-500/30 transition-all active:scale-95">
+                            BẬT LED
+                        </button>
+                        <button type="button" id="btn-led-off"
+                            class="py-1.5 px-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-600 text-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 hover:text-white border border-slate-200 dark:border-slate-700 transition-all active:scale-95">
+                            TẮT LED
                         </button>
                     </div>
-                </form>
+                </div>
+
             </section>
 
-        </div>
-
-        <!-- CỘT PHẢI: LIVE MESSAGE FEED & BỘ LỌC -->
-        <div class="lg:col-span-8 xl:col-span-8 flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden min-h-[600px] max-h-[calc(100vh-7.5rem)]">
+            <!-- KHU VỰC LUỒNG DỮ LIỆU REAL-TIME (MESSAGE STREAM LOG) -->
+            <div class="flex-1 flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden min-h-[460px] max-h-[calc(100vh-17.5rem)]">
             
             <!-- Thanh công cụ phía trên luồng dữ liệu -->
             <div class="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -325,8 +424,9 @@
                         </svg>
                     </div>
                     <p class="font-medium text-slate-600 dark:text-slate-300">Chưa có dữ liệu nào được nhận</p>
-                    <p class="text-xs max-w-sm mt-1.5 leading-relaxed">Hãy nhấn <b>Kết nối</b> tới Broker, sau đó <b>Đăng ký theo dõi</b> một topic (ví dụ: <code class="text-indigo-500">sensor/nhietdo</code>) để bắt đầu nhận dữ liệu thời gian thực.</p>
+                    <p class="text-xs max-w-sm mt-1.5 leading-relaxed">Hãy nhấn <b>Kết nối</b> tới Broker, sau đó <b>Đăng ký theo dõi</b> topic <code class="text-indigo-500">esp32c/#</code> để nhận dữ liệu cảm biến và phản hồi LED từ ESP32-C.</p>
                 </div>
+            </div>
             </div>
         </div>
 
@@ -402,7 +502,30 @@
                 btnPause: document.getElementById('btn-pause'),
                 pauseText: document.getElementById('pause-text'),
                 btnClear: document.getElementById('btn-clear'),
-                toastContainer: document.getElementById('toast-container')
+                toastContainer: document.getElementById('toast-container'),
+
+                // ESP32-C Dashboard Elements
+                dashTemp: document.getElementById('dash-temp'),
+                dashTempBar: document.getElementById('dash-temp-bar'),
+                dashTempTime: document.getElementById('dash-temp-time'),
+                dashHumi: document.getElementById('dash-humi'),
+                dashHumiBar: document.getElementById('dash-humi-bar'),
+                dashHumiTime: document.getElementById('dash-humi-time'),
+                dashDevice: document.getElementById('dash-device'),
+                dashRssi: document.getElementById('dash-rssi'),
+                dashUptime: document.getElementById('dash-uptime'),
+                ledToggleSwitch: document.getElementById('led-toggle-switch'),
+                ledIndicatorDot: document.getElementById('led-indicator-dot'),
+                ledStatusLabel: document.getElementById('led-status-label'),
+                btnLedOn: document.getElementById('btn-led-on'),
+                btnLedOff: document.getElementById('btn-led-off')
+            };
+
+            // Topic mặc định cho ESP32-C
+            const ESP32_TOPICS = {
+                SENSOR: 'esp32c/sensor/data',
+                CONTROL: 'esp32c/control',
+                STATUS: 'esp32c/status'
             };
 
             // --- HÀM TIỆN ÍCH ---
@@ -549,10 +672,105 @@
                 // Mặc định ban đầu
                 els.brokerUrl.value = 'wss://broker.emqx.io:8084/mqtt';
                 els.clientId.value = generateRandomClientId();
-                // Thêm sẵn 1 topic mẫu để người dùng dễ test
-                addSubscriptionToState('test/vietnam/#', 0);
+                // Tự động đăng ký sẵn topic esp32c/# để nhận toàn bộ cảm biến & trạng thái LED
+                addSubscriptionToState('esp32c/#', 0);
                 renderSubscriptionList();
-                els.pubTopic.value = 'test/vietnam/sensor1';
+                els.pubTopic.value = ESP32_TOPICS.CONTROL;
+                els.pubPayload.value = JSON.stringify({ led: 1 });
+            }
+
+            // --- CẬP NHẬT DASHBOARD ESP32-C TỪ DỮ LIỆU NHẬN ĐƯỢC ---
+            function updateEsp32Dashboard(topic, rawPayload) {
+                let data = null;
+                try {
+                    data = JSON.parse(rawPayload.trim());
+                } catch (e) {
+                    // Nếu payload không phải JSON, vẫn hỗ trợ ON/OFF dạng text cho topic status
+                    if (topic === ESP32_TOPICS.STATUS) {
+                        const upper = rawPayload.trim().toUpperCase();
+                        if (upper === 'ON' || upper === '1') updateLedVisualState(true);
+                        if (upper === 'OFF' || upper === '0') updateLedVisualState(false);
+                    }
+                    return;
+                }
+
+                if (!data || typeof data !== 'object') return;
+                const nowStr = new Date().toLocaleTimeString('vi-VN');
+
+                // 1. Cập nhật dữ liệu cảm biến (Nhiệt độ, Độ ẩm, Thiết bị)
+                if (topic === ESP32_TOPICS.SENSOR || data.temp !== undefined || data.humi !== undefined) {
+                    if (typeof data.temp === 'number') {
+                        els.dashTemp.textContent = data.temp.toFixed(1);
+                        const tempPercent = Math.min(100, Math.max(0, (data.temp / 50) * 100));
+                        els.dashTempBar.style.width = `${tempPercent}%`;
+                        els.dashTempTime.textContent = `Cập nhật: ${nowStr}`;
+                    }
+                    if (typeof data.humi === 'number') {
+                        els.dashHumi.textContent = data.humi.toFixed(1);
+                        const humiPercent = Math.min(100, Math.max(0, data.humi));
+                        els.dashHumiBar.style.width = `${humiPercent}%`;
+                        els.dashHumiTime.textContent = `Cập nhật: ${nowStr}`;
+                    }
+                    if (data.device) {
+                        els.dashDevice.textContent = String(data.device);
+                    }
+                    if (typeof data.wifi_rssi === 'number') {
+                        els.dashRssi.textContent = `${data.wifi_rssi} dBm`;
+                    }
+                    if (typeof data.uptime_s === 'number') {
+                        els.dashUptime.textContent = formatUptime(data.uptime_s);
+                    }
+                }
+
+                // 2. Cập nhật đồng bộ trạng thái LED khi nhận phản hồi từ esp32c/status
+                if (topic === ESP32_TOPICS.STATUS || data.led !== undefined || data.state !== undefined) {
+                    if (data.led === 1 || data.led === true || String(data.state).toUpperCase() === 'ON') {
+                        updateLedVisualState(true);
+                    } else if (data.led === 0 || data.led === false || String(data.state).toUpperCase() === 'OFF') {
+                        updateLedVisualState(false);
+                    }
+                }
+            }
+
+            function formatUptime(seconds) {
+                if (seconds < 60) return `${seconds}s`;
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                if (mins < 60) return `${mins}m ${secs}s`;
+                const hrs = Math.floor(mins / 60);
+                return `${hrs}h ${mins % 60}m`;
+            }
+
+            function updateLedVisualState(isOn) {
+                els.ledToggleSwitch.checked = isOn;
+                if (isOn) {
+                    els.ledIndicatorDot.className = 'w-3 h-3 rounded-full bg-amber-400 shadow-[0_0_12px_#fbbf24] transition-all duration-300';
+                    els.ledStatusLabel.textContent = 'ĐANG BẬT (ON)';
+                    els.ledStatusLabel.className = 'text-sm font-bold text-amber-500 dark:text-amber-400';
+                } else {
+                    els.ledIndicatorDot.className = 'w-3 h-3 rounded-full bg-slate-400 transition-all duration-300';
+                    els.ledStatusLabel.textContent = 'ĐANG TẮT (OFF)';
+                    els.ledStatusLabel.className = 'text-sm font-bold text-slate-600 dark:text-slate-300';
+                }
+            }
+
+            function sendLedCommand(turnOn) {
+                if (!mqttClient || !isConnected) {
+                    showToast('Vui lòng kết nối MQTT Broker trước khi điều khiển LED!', 'warning');
+                    // Trả lại trạng thái switch cũ nếu chưa kết nối
+                    els.ledToggleSwitch.checked = !turnOn;
+                    return;
+                }
+
+                const payload = JSON.stringify({ led: turnOn ? 1 : 0 });
+                mqttClient.publish(ESP32_TOPICS.CONTROL, payload, { qos: 0, retain: false }, (err) => {
+                    if (err) {
+                        showToast(`Gửi lệnh LED thất bại: ${err.message}`, 'error');
+                    } else {
+                        updateLedVisualState(turnOn);
+                        showToast(`Đã gửi lệnh ${turnOn ? 'BẬT' : 'TẮT'} LED tới ESP32-C`, 'success');
+                    }
+                });
             }
 
             // --- QUẢN LÝ TRẠNG THÁI GIAO DIỆN KẾT NỐI ---
@@ -814,6 +1032,9 @@
 
             // --- XỬ LÝ & HIỂN THỊ TIN NHẮN NHẬN ĐƯỢC ---
             function handleIncomingMessage(topic, payload, qos, retain) {
+                // Cập nhật các thẻ Dashboard ESP32-C nếu khớp dữ liệu
+                updateEsp32Dashboard(topic, payload);
+
                 const msgObj = {
                     id: Date.now() + Math.random().toString(36).substr(2, 5),
                     timestamp: formatTime(new Date()),
@@ -993,17 +1214,22 @@
 
             // 8. Điền dữ liệu JSON mẫu để test nhanh
             els.fillSampleJson.addEventListener('click', () => {
-                if (!els.pubTopic.value.trim()) {
-                    els.pubTopic.value = 'test/vietnam/sensor1';
-                }
-                const sample = {
-                    device_id: "ESP32_HN_01",
-                    temperature: +(24 + Math.random() * 6).toFixed(1),
-                    humidity: Math.floor(60 + Math.random() * 20),
-                    status: "online",
-                    timestamp: Math.floor(Date.now() / 1000)
-                };
-                els.pubPayload.value = JSON.stringify(sample, null, 2);
+                els.pubTopic.value = ESP32_TOPICS.CONTROL;
+                const nextLedState = els.ledToggleSwitch.checked ? 0 : 1;
+                els.pubPayload.value = JSON.stringify({ led: nextLedState }, null, 2);
+            });
+
+            // Sự kiện điều khiển LED từ Dashboard
+            els.ledToggleSwitch.addEventListener('change', (e) => {
+                sendLedCommand(e.target.checked);
+            });
+
+            els.btnLedOn.addEventListener('click', () => {
+                sendLedCommand(true);
+            });
+
+            els.btnLedOff.addEventListener('click', () => {
+                sendLedCommand(false);
             });
 
             // 9. Lọc tìm kiếm tin nhắn
