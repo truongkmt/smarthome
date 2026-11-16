@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT WebSocket Client - Theo Dõi Dữ Liệu Real-time</title>
+    <!-- Tải Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tải MQTT.js qua CDN -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <!-- Tải Font Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        slate: {
+                            850: '#172033',
+                            950: '#0b1120',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Tùy chỉnh thanh cuộn cho đẹp mắt */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(156, 163, 175, 0.4);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(156, 163, 175, 0.6);
+        }
+        .msg-enter {
+            animation: slideIn 0.2s ease-out forwards;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 font-sans antialiased transition-colors duration-200 min-h-screen flex flex-col">
+
+    <!-- Thông báo Toast (Thay thế cho alert) -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Thanh điều hướng trên cùng (Header) -->
+    <header class="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+        <div class="max-w-[1600px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+            <!-- Logo & Tiêu đề -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg tracking-tight leading-none">MQTT Live Monitor</h1>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Trình nhận & kiểm thử dữ liệu WebSocket</p>
+                </div>
+            </div>
+
+            <!-- Trạng thái & Nút chuyển giao diện -->
+            <div class="flex items-center gap-3">
+                <!-- Huy hiệu trạng thái kết nối -->
+                <div id="status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all">
+                    <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                    <span id="status-text">Chưa kết nối</span>
+                </div>
+
+                <!-- Nút chuyển Dark/Light Mode -->
+                <button id="theme-toggle" title="Đổi giao diện Sáng/Tối" class="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors">
+                    <!-- Icon Mặt trời (hiện ở dark mode) -->
+                    <svg id="sun-icon" class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                    </svg>
+                    <!-- Icon Mặt trăng (hiện ở light mode) -->
+                    <svg id="moon-icon" class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Nội dung chính (Dashboard Grid) -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- CỘT TRÁI: Cấu hình Kết nối, Đăng ký Topic & Gửi thử -->
+        <div class="lg:col-span-4 xl:col-span-4 flex flex-col gap-6">
+            
+            <!-- 1. PANEL CẤU HÌNH KẾT NỐI -->
+            <section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-semibold text-base flex items-center gap-2">
+                        <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                        Cấu hình Kết nối
+                    </h2>
+                    <span class="text-[11px] font-medium px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">WSS / WS</span>
+                </div>
+
+                <form id="connection-form" class="space-y-3.5">
+                    <!-- Broker URL -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label for="broker-url" class="block text-xs font-medium text-slate-600 dark:text-slate-400">Broker URL</label>
+                            <select id="preset-brokers" class="text-[11px] bg-transparent text-indigo-600 dark:text-indigo-400 font-medium focus:outline-none cursor-pointer">
+                                <option value="wss://broker.emqx.io:8084/mqtt">EMQX Public (WSS)</option>
+                                <option value="wss://test.mosquitto.org:8081">Mosquitto Test (WSS)</option>
+                                <option value="wss://broker.hivemq.com:8884/mqtt">HiveMQ Public (WSS)</option>
+                            </select>
+                        </div>
+                        <input type="text" id="broker-url" required placeholder="wss://broker.emqx.io:8084/mqtt"
+                            class="w-full px-3.5 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-mono">
+                    </div>
+
+                    <!-- Client ID -->
+                    <div>
+                        <label for="client-id" class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Client ID</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="client-id" required
+                                class="w-full px-3.5 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none font-mono">
+                            <button type="button" id="gen-client-id" title="Tạo Client ID ngẫu nhiên mới"
+                                class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors shrink-0">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Username & Password -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label for="username" class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Username <span class="text-slate-400 font-normal">(Tùy chọn)</span></label>
+                            <input type="text" id="username" placeholder="user..."
+                                class="w-full px-3.5 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        </div>
+                        <div>
+                            <label for="password" class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Password <span class="text-slate-400 font-normal">(Tùy chọn)</span></label>
+                            <input type="password" id="password" placeholder="••••••"
+                                class="w-full px-3.5 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        </div>
+                    </div>
+
+                    <!-- Nút Kết nối / Ngắt kết nối -->
+                    <div class="pt-1 flex gap-2">
+                        <button type="submit" id="btn-connect"
+                            class="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-medium text-sm shadow-md shadow-indigo-500/20 transition-all flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"></path>
+                            </svg>
+                            <span>Kết nối</span>
+                        </button>
+                        <button type="button" id="btn-disconnect" disabled
+                            class="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:pointer-events-none active:scale-[0.99] text-white font-medium text-sm shadow-md shadow-rose-500/20 transition-all flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            <span>Ngắt kết nối</span>
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- 2. PANEL QUẢN LÝ ĐĂNG KÝ TOPIC -->
+            <section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-semibold text-base flex items-center gap-2">
+                        <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                        </svg>
+                        Đăng ký Topic (Subscribe)
+                    </h2>
+                    <span id="sub-count" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">0</span>
+                </div>
+
+                <form id="subscribe-form" class="space-y-3">
+                    <div class="flex gap-2">
+                        <input type="text" id="sub-topic" placeholder="VD: sensor/nhietdo hoặc test/#" required
+                            class="flex-1 min-w-0 px-3.5 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-emerald-500 outline-none font-mono">
+                        <select id="sub-qos" title="Chất lượng dịch vụ (QoS)"
+                            class="px-2.5 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-emerald-500 outline-none font-medium">
+                            <option value="0">QoS 0</option>
+                            <option value="1">QoS 1</option>
+                            <option value="2">QoS 2</option>
+                        </select>
+                    </div>
+                    <button type="submit" id="btn-subscribe" disabled
+                        class="w-full py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:pointer-events-none active:scale-[0.99] text-white font-medium text-sm shadow-sm transition-all flex items-center justify-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        <span>Đăng ký theo dõi</span>
+                    </button>
+                </form>
+
+                <!-- Danh sách các topic đã đăng ký -->
+                <div class="mt-4">
+                    <p class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">Danh sách đang theo dõi:</p>
+                    <div id="subscribed-list" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        <div class="text-xs text-slate-400 dark:text-slate-500 italic text-center py-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                            Chưa đăng ký topic nào
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. TIỆN ÍCH GỬI THỬ TIN NHẮN (PUBLISH PANEL) -->
+            <section class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="font-semibold text-base flex items-center gap-2">
+                        <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                        </svg>
+                        Gửi thử tin nhắn (Publish)
+                    </h2>
+                    <button type="button" id="fill-sample-json" class="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-medium">
+                        Điền JSON mẫu
+                    </button>
+                </div>
+
+                <form id="publish-form" class="space-y-3">
+                    <div class="flex gap-2">
+                        <input type="text" id="pub-topic" placeholder="Topic nhận (VD: sensor/nhietdo)" required
+                            class="flex-1 min-w-0 px-3.5 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-amber-500 outline-none font-mono">
+                        <select id="pub-qos" class="px-2.5 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 outline-none font-medium">
+                            <option value="0">QoS 0</option>
+                            <option value="1">QoS 1</option>
+                            <option value="2">QoS 2</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <textarea id="pub-payload" rows="3" placeholder='Nội dung tin nhắn hoặc JSON...' required
+                            class="w-full px-3.5 py-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-amber-500 outline-none font-mono resize-y"></textarea>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2">
+                        <label class="inline-flex items-center gap-2 cursor-pointer text-xs text-slate-600 dark:text-slate-400 select-none">
+                            <input type="checkbox" id="pub-retain" class="rounded text-amber-500 focus:ring-amber-500 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700">
+                            <span>Retain (Lưu giữ tin)</span>
+                        </label>
+                        <button type="submit" id="btn-publish" disabled
+                            class="py-2 px-5 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:pointer-events-none active:scale-[0.99] text-white font-medium text-sm shadow-sm transition-all flex items-center gap-1.5">
+                            <span>Gửi đi</span>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+        </div>
+
+        <!-- CỘT PHẢI: LIVE MESSAGE FEED & BỘ LỌC -->
+        <div class="lg:col-span-8 xl:col-span-8 flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden min-h-[600px] max-h-[calc(100vh-7.5rem)]">
+            
+            <!-- Thanh công cụ phía trên luồng dữ liệu -->
+            <div class="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5">
+                    <h2 class="font-semibold text-base">Dữ liệu nhận được</h2>
+                    <span id="msg-counter" class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">0 tin</span>
+                </div>
+
+                <!-- Bộ lọc & Nút hành động -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- Ô tìm kiếm -->
+                    <div class="relative flex-1 sm:w-56">
+                        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                        <input type="text" id="search-input" placeholder="Lọc topic hoặc nội dung..."
+                            class="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+
+                    <!-- Nút Tạm dừng (Pause/Resume) -->
+                    <button id="btn-pause" title="Tạm dừng hiển thị tin nhắn mới"
+                        class="px-3 py-1.5 text-xs font-medium rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5">
+                        <svg id="pause-icon" class="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                        </svg>
+                        <span id="pause-text">Tạm dừng</span>
+                    </button>
+
+                    <!-- Nút Xóa Log -->
+                    <button id="btn-clear" title="Xóa toàn bộ lịch sử tin nhắn"
+                        class="px-3 py-1.5 text-xs font-medium rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-600 dark:hover:text-rose-400 hover:border-rose-200 dark:hover:border-rose-800 text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        <span>Xóa log</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Danh sách tin nhắn nhận được -->
+            <div id="message-feed" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/30 dark:bg-slate-950/30">
+                <!-- Trạng thái trống ban đầu -->
+                <div id="empty-state" class="h-full flex flex-col items-center justify-center text-center p-8 text-slate-400 dark:text-slate-500">
+                    <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center mb-4">
+                        <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                        </svg>
+                    </div>
+                    <p class="font-medium text-slate-600 dark:text-slate-300">Chưa có dữ liệu nào được nhận</p>
+                    <p class="text-xs max-w-sm mt-1.5 leading-relaxed">Hãy nhấn <b>Kết nối</b> tới Broker, sau đó <b>Đăng ký theo dõi</b> một topic (ví dụ: <code class="text-indigo-500">sensor/nhietdo</code>) để bắt đầu nhận dữ liệu thời gian thực.</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        /**
+         * ỨNG DỤNG MQTT WEBSOCKET CLIENT
+         * Hỗ trợ kết nối WSS, quản lý Topic, format JSON tự động và lưu cấu hình LocalStorage.
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- BIẾN TRẠNG THÁI ---
+            let mqttClient = null;
+            let isConnected = false;
+            let isPaused = false;
+            let messages = []; // Lưu tối đa 300 tin nhắn gần nhất để tối ưu hiệu năng
+            const MAX_MESSAGES = 300;
+            // Map lưu trữ các topic đã đăng ký: key = topic string, value = { qos, colorObj }
+            const subscriptions = new Map();
+
+            // Bảng màu phân biệt cho từng Topic
+            const TOPIC_COLORS = [
+                { bg: 'bg-indigo-100 dark:bg-indigo-950/70', text: 'text-indigo-700 dark:text-indigo-300', border: 'border-indigo-200 dark:border-indigo-800', dot: 'bg-indigo-500' },
+                { bg: 'bg-emerald-100 dark:bg-emerald-950/70', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-500' },
+                { bg: 'bg-amber-100 dark:bg-amber-950/70', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800', dot: 'bg-amber-500' },
+                { bg: 'bg-rose-100 dark:bg-rose-950/70', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-800', dot: 'bg-rose-500' },
+                { bg: 'bg-cyan-100 dark:bg-cyan-950/70', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-200 dark:border-cyan-800', dot: 'bg-cyan-500' },
+                { bg: 'bg-purple-100 dark:bg-purple-950/70', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-200 dark:border-purple-800', dot: 'bg-purple-500' },
+                { bg: 'bg-teal-100 dark:bg-teal-950/70', text: 'text-teal-700 dark:text-teal-300', border: 'border-teal-200 dark:border-teal-800', dot: 'bg-teal-500' },
+            ];
+            let colorIndex = 0;
+
+            // --- THAM CHIẾU DOM ---
+            const els = {
+                themeToggle: document.getElementById('theme-toggle'),
+                statusBadge: document.getElementById('status-badge'),
+                statusDot: document.getElementById('status-dot'),
+                statusText: document.getElementById('status-text'),
+                
+                // Connection Form
+                connForm: document.getElementById('connection-form'),
+                presetBrokers: document.getElementById('preset-brokers'),
+                brokerUrl: document.getElementById('broker-url'),
+                clientId: document.getElementById('client-id'),
+                genClientId: document.getElementById('gen-client-id'),
+                username: document.getElementById('username'),
+                password: document.getElementById('password'),
+                btnConnect: document.getElementById('btn-connect'),
+                btnDisconnect: document.getElementById('btn-disconnect'),
+
+                // Subscription Form
+                subForm: document.getElementById('subscribe-form'),
+                subTopic: document.getElementById('sub-topic'),
+                subQos: document.getElementById('sub-qos'),
+                btnSubscribe: document.getElementById('btn-subscribe'),
+                subList: document.getElementById('subscribed-list'),
+                subCount: document.getElementById('sub-count'),
+
+                // Publish Form
+                pubForm: document.getElementById('publish-form'),
+                pubTopic: document.getElementById('pub-topic'),
+                pubQos: document.getElementById('pub-qos'),
+                pubPayload: document.getElementById('pub-payload'),
+                pubRetain: document.getElementById('pub-retain'),
+                btnPublish: document.getElementById('btn-publish'),
+                fillSampleJson: document.getElementById('fill-sample-json'),
+
+                // Feed & Controls
+                messageFeed: document.getElementById('message-feed'),
+                emptyState: document.getElementById('empty-state'),
+                msgCounter: document.getElementById('msg-counter'),
+                searchInput: document.getElementById('search-input'),
+                btnPause: document.getElementById('btn-pause'),
+                pauseText: document.getElementById('pause-text'),
+                btnClear: document.getElementById('btn-clear'),
+                toastContainer: document.getElementById('toast-container')
+            };
+
+            // --- HÀM TIỆN ÍCH ---
+
+            // Tạo thông báo Toast thay cho alert()
+            function showToast(message, type = 'info') {
+                const toast = document.createElement('div');
+                const colors = {
+                    success: 'bg-emerald-600 text-white',
+                    error: 'bg-rose-600 text-white',
+                    warning: 'bg-amber-500 text-white',
+                    info: 'bg-slate-800 dark:bg-slate-700 text-white'
+                };
+                toast.className = `${colors[type] || colors.info} px-4 py-2.5 rounded-xl shadow-lg text-xs font-medium flex items-center gap-2 pointer-events-auto transition-all duration-300 transform translate-y-2 opacity-0`;
+                toast.textContent = message;
+                els.toastContainer.appendChild(toast);
+
+                requestAnimationFrame(() => {
+                    toast.classList.remove('translate-y-2', 'opacity-0');
+                });
+
+                setTimeout(() => {
+                    toast.classList.add('opacity-0', 'translate-y-2');
+                    setTimeout(() => toast.remove(), 300);
+                }, 3000);
+            }
+
+            // Sinh Client ID ngẫu nhiên
+            function generateRandomClientId() {
+                const randomHex = Math.random().toString(16).substring(2, 10);
+                return `mqtt_web_${randomHex}`;
+            }
+
+            // Lấy màu cho topic (hỗ trợ khớp wildcard cơ bản)
+            function getTopicColor(topic) {
+                if (subscriptions.has(topic)) {
+                    return subscriptions.get(topic).color;
+                }
+                // Tìm subscription wildcard khớp với topic nhận được
+                for (const [subPattern, data] of subscriptions.entries()) {
+                    if (matchMqttTopic(subPattern, topic)) {
+                        return data.color;
+                    }
+                }
+                return TOPIC_COLORS[0];
+            }
+
+            // Kiểm tra topic có khớp với filter MQTT (+ và #) không
+            function matchMqttTopic(filter, topic) {
+                if (filter === topic) return true;
+                const filterParts = filter.split('/');
+                const topicParts = topic.split('/');
+                for (let i = 0; i < filterParts.length; i++) {
+                    const fp = filterParts[i];
+                    if (fp === '#') return true;
+                    if (fp === '+') {
+                        if (i >= topicParts.length) return false;
+                        continue;
+                    }
+                    if (fp !== topicParts[i]) return false;
+                }
+                return filterParts.length === topicParts.length;
+            }
+
+            // Escape HTML để chống XSS khi hiển thị payload
+            function escapeHtml(str) {
+                return str
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
+
+            // Kiểm tra và format chuỗi JSON
+            function formatPayload(rawText) {
+                const trimmed = rawText.trim();
+                if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
+                    (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                    try {
+                        const parsed = JSON.parse(trimmed);
+                        return {
+                            isJson: true,
+                            formatted: JSON.stringify(parsed, null, 2)
+                        };
+                    } catch (e) {
+                        // Không phải JSON hợp lệ
+                    }
+                }
+                return {
+                    isJson: false,
+                    formatted: rawText
+                };
+            }
+
+            // Định dạng thời gian HH:mm:ss.SSS
+            function formatTime(date) {
+                const h = String(date.getHours()).padStart(2, '0');
+                const m = String(date.getMinutes()).padStart(2, '0');
+                const s = String(date.getSeconds()).padStart(2, '0');
+                const ms = String(date.getMilliseconds()).padStart(3, '0');
+                return `${h}:${m}:${s}.${ms}`;
+            }
+
+            // --- LƯU & TẢI CẤU HÌNH LOCALSTORAGE ---
+            const STORAGE_KEY = 'mqtt_client_config_v1';
+
+            function saveConfig() {
+                const config = {
+                    brokerUrl: els.brokerUrl.value.trim(),
+                    clientId: els.clientId.value.trim(),
+                    username: els.username.value.trim(),
+                    // Lưu danh sách topic đang theo dõi để tiện dùng lại
+                    savedTopics: Array.from(subscriptions.entries()).map(([topic, val]) => ({ topic, qos: val.qos }))
+                };
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+                } catch (e) {
+                    console.warn('Không thể lưu vào localStorage:', e);
+                }
+            }
+
+            function loadConfig() {
+                try {
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    if (raw) {
+                        const config = JSON.parse(raw);
+                        els.brokerUrl.value = config.brokerUrl || 'wss://broker.emqx.io:8084/mqtt';
+                        els.clientId.value = config.clientId || generateRandomClientId();
+                        els.username.value = config.username || '';
+                        
+                        // Khôi phục danh sách topic gợi ý nếu có
+                        if (Array.isArray(config.savedTopics) && config.savedTopics.length > 0) {
+                            config.savedTopics.forEach(item => {
+                                addSubscriptionToState(item.topic, item.qos);
+                            });
+                            renderSubscriptionList();
+                        }
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('Lỗi đọc localStorage:', e);
+                }
+                // Mặc định ban đầu
+                els.brokerUrl.value = 'wss://broker.emqx.io:8084/mqtt';
+                els.clientId.value = generateRandomClientId();
+                // Thêm sẵn 1 topic mẫu để người dùng dễ test
+                addSubscriptionToState('test/vietnam/#', 0);
+                renderSubscriptionList();
+                els.pubTopic.value = 'test/vietnam/sensor1';
+            }
+
+            // --- QUẢN LÝ TRẠNG THÁI GIAO DIỆN KẾT NỐI ---
+            function updateConnectionUI(state, customMsg = '') {
+                // state: 'disconnected' | 'connecting' | 'connected' | 'error'
+                const badgeBase = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ';
+                
+                if (state === 'connecting') {
+                    isConnected = false;
+                    els.statusBadge.className = badgeBase + 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800';
+                    els.statusDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping';
+                    els.statusText.textContent = customMsg || 'Đang kết nối...';
+                    
+                    els.btnConnect.disabled = true;
+                    els.btnDisconnect.disabled = false;
+                    setInputsDisabled(true);
+                } else if (state === 'connected') {
+                    isConnected = true;
+                    els.statusBadge.className = badgeBase + 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800';
+                    els.statusDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+                    els.statusText.textContent = customMsg || 'Đã kết nối';
+
+                    els.btnConnect.disabled = true;
+                    els.btnDisconnect.disabled = false;
+                    els.btnSubscribe.disabled = false;
+                    els.btnPublish.disabled = false;
+                    setInputsDisabled(true);
+                } else if (state === 'error') {
+                    isConnected = false;
+                    els.statusBadge.className = badgeBase + 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800';
+                    els.statusDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
+                    els.statusText.textContent = customMsg || 'Lỗi kết nối';
+
+                    els.btnConnect.disabled = false;
+                    els.btnDisconnect.disabled = true;
+                    els.btnSubscribe.disabled = true;
+                    els.btnPublish.disabled = true;
+                    setInputsDisabled(false);
+                } else {
+                    // disconnected
+                    isConnected = false;
+                    els.statusBadge.className = badgeBase + 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+                    els.statusDot.className = 'w-2.5 h-2.5 rounded-full bg-slate-400';
+                    els.statusText.textContent = customMsg || 'Mất kết nối';
+
+                    els.btnConnect.disabled = false;
+                    els.btnDisconnect.disabled = true;
+                    els.btnSubscribe.disabled = true;
+                    els.btnPublish.disabled = true;
+                    setInputsDisabled(false);
+                }
+            }
+
+            function setInputsDisabled(disabled) {
+                els.brokerUrl.disabled = disabled;
+                els.presetBrokers.disabled = disabled;
+                els.clientId.disabled = disabled;
+                els.genClientId.disabled = disabled;
+                els.username.disabled = disabled;
+                els.password.disabled = disabled;
+            }
+
+            // --- XỬ LÝ KẾT NỐI MQTT ---
+            function connectMQTT() {
+                const url = els.brokerUrl.value.trim();
+                const clientId = els.clientId.value.trim() || generateRandomClientId();
+                const username = els.username.value.trim();
+                const password = els.password.value;
+
+                if (!url) {
+                    showToast('Vui lòng nhập Broker URL!', 'warning');
+                    return;
+                }
+
+                // Kiểm tra Mixed Content (trang HTTPS nhưng dùng ws://)
+                if (window.location.protocol === 'https:' && url.startsWith('ws://')) {
+                    showToast('Cảnh báo: Trang HTTPS yêu cầu giao thức bảo mật wss://', 'warning');
+                }
+
+                // Đóng kết nối cũ nếu tồn tại
+                if (mqttClient) {
+                    try { mqttClient.end(true); } catch (e) {}
+                }
+
+                updateConnectionUI('connecting');
+                saveConfig();
+
+                const options = {
+                    clientId: clientId,
+                    clean: true,
+                    connectTimeout: 8000,
+                    reconnectPeriod: 4000,
+                };
+                if (username) options.username = username;
+                if (password) options.password = password;
+
+                try {
+                    mqttClient = mqtt.connect(url, options);
+
+                    mqttClient.on('connect', () => {
+                        updateConnectionUI('connected', 'Đã kết nối');
+                        showToast('Kết nối tới MQTT Broker thành công!', 'success');
+
+                        // Tự động subscribe lại các topic có trong danh sách
+                        subscriptions.forEach((data, topic) => {
+                            mqttClient.subscribe(topic, { qos: Number(data.qos) }, (err) => {
+                                if (err) {
+                                    showToast(`Lỗi đăng ký lại topic ${topic}`, 'error');
+                                }
+                            });
+                        });
+                    });
+
+                    mqttClient.on('reconnect', () => {
+                        updateConnectionUI('connecting', 'Đang kết nối lại...');
+                    });
+
+                    mqttClient.on('close', () => {
+                        if (isConnected) {
+                            updateConnectionUI('disconnected', 'Đã ngắt kết nối');
+                        }
+                    });
+
+                    mqttClient.on('offline', () => {
+                        updateConnectionUI('disconnected', 'Ngoại tuyến');
+                    });
+
+                    mqttClient.on('error', (err) => {
+                        console.error('MQTT Error:', err);
+                        updateConnectionUI('error', 'Lỗi kết nối');
+                        showToast(`Lỗi MQTT: ${err.message || 'Không thể kết nối'}`, 'error');
+                        if (mqttClient) {
+                            mqttClient.end(true);
+                        }
+                    });
+
+                    // Nhận dữ liệu
+                    mqttClient.on('message', (topic, payloadBuffer, packet) => {
+                        const payloadStr = payloadBuffer.toString();
+                        const qos = packet ? packet.qos : 0;
+                        const retain = packet ? packet.retain : false;
+                        handleIncomingMessage(topic, payloadStr, qos, retain);
+                    });
+
+                } catch (err) {
+                    updateConnectionUI('error', 'URL không hợp lệ');
+                    showToast(`Lỗi khởi tạo kết nối: ${err.message}`, 'error');
+                }
+            }
+
+            function disconnectMQTT() {
+                if (mqttClient) {
+                    mqttClient.end(true, () => {
+                        updateConnectionUI('disconnected', 'Đã ngắt kết nối');
+                        showToast('Đã ngắt kết nối khỏi Broker', 'info');
+                    });
+                    mqttClient = null;
+                } else {
+                    updateConnectionUI('disconnected', 'Chưa kết nối');
+                }
+            }
+
+            // --- QUẢN LÝ SUBSCRIPTIONS ---
+            function addSubscriptionToState(topic, qos) {
+                if (!subscriptions.has(topic)) {
+                    const color = TOPIC_COLORS[colorIndex % TOPIC_COLORS.length];
+                    colorIndex++;
+                    subscriptions.set(topic, { qos: Number(qos), color });
+                } else {
+                    const existing = subscriptions.get(topic);
+                    existing.qos = Number(qos);
+                }
+            }
+
+            function subscribeTopic(topic, qos) {
+                topic = topic.trim();
+                if (!topic) return;
+
+                addSubscriptionToState(topic, qos);
+                renderSubscriptionList();
+                saveConfig();
+
+                if (mqttClient && isConnected) {
+                    mqttClient.subscribe(topic, { qos: Number(qos) }, (err) => {
+                        if (err) {
+                            showToast(`Không thể đăng ký "${topic}": ${err.message}`, 'error');
+                        } else {
+                            showToast(`Đã đăng ký: ${topic} (QoS ${qos})`, 'success');
+                            // Tự động điền vào ô Publish nếu ô Publish đang trống
+                            if (!els.pubTopic.value.trim() && !topic.includes('#') && !topic.includes('+')) {
+                                els.pubTopic.value = topic;
+                            }
+                        }
+                    });
+                }
+            }
+
+            function unsubscribeTopic(topic) {
+                subscriptions.delete(topic);
+                renderSubscriptionList();
+                saveConfig();
+
+                if (mqttClient && isConnected) {
+                    mqttClient.unsubscribe(topic, (err) => {
+                        if (!err) {
+                            showToast(`Đã hủy đăng ký: ${topic}`, 'info');
+                        }
+                    });
+                }
+            }
+
+            function renderSubscriptionList() {
+                els.subCount.textContent = subscriptions.size;
+                els.subList.innerHTML = '';
+
+                if (subscriptions.size === 0) {
+                    els.subList.innerHTML = `
+                        <div class="text-xs text-slate-400 dark:text-slate-500 italic text-center py-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                            Chưa đăng ký topic nào
+                        </div>`;
+                    return;
+                }
+
+                subscriptions.forEach((data, topic) => {
+                    const item = document.createElement('div');
+                    item.className = `flex items-center justify-between gap-2 px-3 py-2 rounded-xl border ${data.color.bg} ${data.color.border} transition-all`;
+                    
+                    item.innerHTML = `
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="w-2 h-2 rounded-full shrink-0 ${data.color.dot}"></span>
+                            <span class="text-xs font-mono font-medium truncate ${data.color.text}" title="${escapeHtml(topic)}">${escapeHtml(topic)}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white/70 dark:bg-slate-900/60 text-slate-600 dark:text-slate-300">QoS ${data.qos}</span>
+                            <button type="button" data-unsub="${escapeHtml(topic)}" title="Hủy đăng ký"
+                                class="p-1 rounded-lg hover:bg-rose-500/20 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+
+                    // Gắn sự kiện click vào nút xóa
+                    const unsubBtn = item.querySelector('button');
+                    unsubBtn.addEventListener('click', () => unsubscribeTopic(topic));
+
+                    // Click vào tên topic để điền nhanh sang ô Publish (nếu không chứa wildcard)
+                    item.querySelector('span.font-mono').addEventListener('click', () => {
+                        if (!topic.includes('#') && !topic.includes('+')) {
+                            els.pubTopic.value = topic;
+                            showToast(`Đã chọn topic "${topic}" để gửi tin`, 'info');
+                        }
+                    });
+
+                    els.subList.appendChild(item);
+                });
+            }
+
+            // --- XỬ LÝ & HIỂN THỊ TIN NHẮN NHẬN ĐƯỢC ---
+            function handleIncomingMessage(topic, payload, qos, retain) {
+                const msgObj = {
+                    id: Date.now() + Math.random().toString(36).substr(2, 5),
+                    timestamp: formatTime(new Date()),
+                    topic,
+                    payload,
+                    qos,
+                    retain,
+                    parsed: formatPayload(payload),
+                    color: getTopicColor(topic)
+                };
+
+                messages.unshift(msgObj);
+                if (messages.length > MAX_MESSAGES) {
+                    messages.pop();
+                }
+
+                updateMessageCounter();
+
+                if (!isPaused) {
+                    renderMessages();
+                }
+            }
+
+            function updateMessageCounter() {
+                els.msgCounter.textContent = `${messages.length} tin`;
+            }
+
+            function renderMessages() {
+                const keyword = els.searchInput.value.trim().toLowerCase();
+                const filtered = keyword 
+                    ? messages.filter(m => m.topic.toLowerCase().includes(keyword) || m.payload.toLowerCase().includes(keyword))
+                    : messages;
+
+                if (filtered.length === 0) {
+                    els.messageFeed.innerHTML = '';
+                    els.messageFeed.appendChild(els.emptyState);
+                    els.emptyState.classList.remove('hidden');
+                    return;
+                }
+
+                els.emptyState.classList.add('hidden');
+                els.messageFeed.innerHTML = '';
+
+                filtered.forEach((msg, index) => {
+                    const card = document.createElement('div');
+                    // Thêm hiệu ứng mượt cho tin nhắn mới nhất
+                    const animClass = index === 0 ? 'msg-enter' : '';
+                    card.className = `${animClass} bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition-all`;
+
+                    const jsonBadge = msg.parsed.isJson 
+                        ? `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300">JSON</span>` 
+                        : `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">TEXT</span>`;
+
+                    const retainBadge = msg.retain 
+                        ? `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">Retained</span>` 
+                        : '';
+
+                    card.innerHTML = `
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-mono font-medium border ${msg.color.bg} ${msg.color.text} ${msg.color.border} truncate max-w-[260px] sm:max-w-md" title="${escapeHtml(msg.topic)}">
+                                    <span class="w-1.5 h-1.5 rounded-full ${msg.color.dot}"></span>
+                                    ${escapeHtml(msg.topic)}
+                                </span>
+                                <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">QoS ${msg.qos}</span>
+                                ${jsonBadge}
+                                ${retainBadge}
+                            </div>
+
+                            <div class="flex items-center gap-2 ml-auto">
+                                <span class="text-[11px] font-mono text-slate-400 dark:text-slate-500">${msg.timestamp}</span>
+                                <button type="button" class="copy-btn p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Sao chép nội dung">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <pre class="text-xs sm:text-[13px] font-mono bg-slate-50 dark:bg-slate-950/80 text-slate-800 dark:text-slate-200 p-3 rounded-lg border border-slate-100 dark:border-slate-800/80 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">${escapeHtml(msg.parsed.formatted)}</pre>
+                    `;
+
+                    // Xử lý sao chép nội dung bằng document.execCommand('copy')
+                    const copyBtn = card.querySelector('.copy-btn');
+                    copyBtn.addEventListener('click', () => {
+                        copyTextToClipboard(msg.payload);
+                    });
+
+                    els.messageFeed.appendChild(card);
+                });
+            }
+
+            // Sao chép an toàn trong môi trường iframe
+            function copyTextToClipboard(text) {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                try {
+                    document.execCommand('copy');
+                    showToast('Đã sao chép nội dung tin nhắn!', 'success');
+                } catch (err) {
+                    showToast('Không thể sao chép tự động', 'error');
+                }
+                document.body.removeChild(textarea);
+            }
+
+            // --- ĐĂNG KÝ CÁC SỰ KIỆN TƯƠNG TÁC ---
+
+            // 1. Đổi giao diện Sáng / Tối
+            els.themeToggle.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+                const isDark = document.documentElement.classList.contains('dark');
+                localStorage.setItem('mqtt_theme', isDark ? 'dark' : 'light');
+            });
+
+            // Khôi phục theme đã chọn
+            if (localStorage.getItem('mqtt_theme') === 'light') {
+                document.documentElement.classList.remove('dark');
+            }
+
+            // 2. Chọn nhanh Broker công cộng
+            els.presetBrokers.addEventListener('change', (e) => {
+                els.brokerUrl.value = e.target.value;
+            });
+
+            // 3. Tạo Client ID ngẫu nhiên mới
+            els.genClientId.addEventListener('click', () => {
+                els.clientId.value = generateRandomClientId();
+            });
+
+            // 4. Submit Form Kết nối
+            els.connForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                connectMQTT();
+            });
+
+            // 5. Ngắt kết nối
+            els.btnDisconnect.addEventListener('click', () => {
+                disconnectMQTT();
+            });
+
+            // 6. Đăng ký Topic mới
+            els.subForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const topic = els.subTopic.value.trim();
+                const qos = els.subQos.value;
+                if (topic) {
+                    subscribeTopic(topic, qos);
+                    els.subTopic.value = '';
+                }
+            });
+
+            // 7. Gửi thử tin nhắn (Publish)
+            els.pubForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                if (!mqttClient || !isConnected) {
+                    showToast('Vui lòng kết nối tới Broker trước khi gửi tin!', 'warning');
+                    return;
+                }
+                const topic = els.pubTopic.value.trim();
+                const payload = els.pubPayload.value;
+                const qos = Number(els.pubQos.value);
+                const retain = els.pubRetain.checked;
+
+                if (!topic) return;
+
+                mqttClient.publish(topic, payload, { qos, retain }, (err) => {
+                    if (err) {
+                        showToast(`Gửi tin thất bại: ${err.message}`, 'error');
+                    } else {
+                        showToast(`Đã gửi tin tới "${topic}"`, 'success');
+                    }
+                });
+            });
+
+            // 8. Điền dữ liệu JSON mẫu để test nhanh
+            els.fillSampleJson.addEventListener('click', () => {
+                if (!els.pubTopic.value.trim()) {
+                    els.pubTopic.value = 'test/vietnam/sensor1';
+                }
+                const sample = {
+                    device_id: "ESP32_HN_01",
+                    temperature: +(24 + Math.random() * 6).toFixed(1),
+                    humidity: Math.floor(60 + Math.random() * 20),
+                    status: "online",
+                    timestamp: Math.floor(Date.now() / 1000)
+                };
+                els.pubPayload.value = JSON.stringify(sample, null, 2);
+            });
+
+            // 9. Lọc tìm kiếm tin nhắn
+            els.searchInput.addEventListener('input', () => {
+                renderMessages();
+            });
+
+            // 10. Tạm dừng / Tiếp tục luồng hiển thị
+            els.btnPause.addEventListener('click', () => {
+                isPaused = !isPaused;
+                if (isPaused) {
+                    els.pauseText.textContent = 'Tiếp tục';
+                    els.btnPause.classList.add('border-amber-400', 'bg-amber-50', 'dark:bg-amber-950/50', 'text-amber-700', 'dark:text-amber-300');
+                    showToast('Đã tạm dừng cập nhật danh sách tin nhắn', 'info');
+                } else {
+                    els.pauseText.textContent = 'Tạm dừng';
+                    els.btnPause.classList.remove('border-amber-400', 'bg-amber-50', 'dark:bg-amber-950/50', 'text-amber-700', 'dark:text-amber-300');
+                    renderMessages();
+                    showToast('Đã tiếp tục hiển thị tin nhắn mới', 'success');
+                }
+            });
+
+            // 11. Xóa toàn bộ Log tin nhắn
+            els.btnClear.addEventListener('click', () => {
+                messages = [];
+                updateMessageCounter();
+                renderMessages();
+                showToast('Đã xóa sạch lịch sử tin nhắn', 'info');
+            });
+
+            // --- KHỞI CHẠY BAN ĐẦU ---
+            loadConfig();
+        });
+    </script>
+</body>
+</html>
