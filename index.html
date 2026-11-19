@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MQTT Live Monitor & ESP32-C Dual Node</title>
+  <title>MQTT Live Monitor & ESP32 Dual Node</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
       --bg: #0f172a;
@@ -14,12 +15,40 @@
       --text: #f1f5f9;
       --muted: #94a3b8;
       --accent: #38bdf8;
+      --accent-text: #0f172a;
       --green: #22c55e;
       --yellow: #eab308;
       --red: #ef4444;
       --orange: #f97316;
-      --purple: #a855f7;
+      --badge-off-bg: rgba(239, 68, 68, 0.15);
+      --badge-off-text: #fca5a5;
+      --badge-off-border: rgba(239, 68, 68, 0.3);
+      --badge-on-bg: rgba(34, 197, 94, 0.15);
+      --badge-on-text: #86efac;
+      --badge-on-border: rgba(34, 197, 94, 0.3);
     }
+
+    body.light-theme {
+      --bg: #f1f5f9;
+      --panel: #ffffff;
+      --panel-2: #f8fafc;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --muted: #475569;
+      --accent: #0284c7;
+      --accent-text: #ffffff;
+      --green: #16a34a;
+      --yellow: #ca8a04;
+      --red: #dc2626;
+      --orange: #ea580c;
+      --badge-off-bg: rgba(220, 38, 38, 0.12);
+      --badge-off-text: #b91c1c;
+      --badge-off-border: rgba(220, 38, 38, 0.28);
+      --badge-on-bg: rgba(22, 163, 74, 0.12);
+      --badge-on-text: #15803d;
+      --badge-on-border: rgba(22, 163, 74, 0.28);
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -27,6 +56,7 @@
       color: var(--text);
       line-height: 1.5;
       padding: 16px;
+      transition: background-color 0.2s, color 0.2s;
     }
     .container { max-width: 1360px; margin: 0 auto; }
     header {
@@ -34,17 +64,23 @@
       gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 18px;
     }
     h1 { font-size: 1.35rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .theme-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--panel); color: var(--text); border: 1px solid var(--border);
+      padding: 6px 12px; border-radius: 999px; font-size: 0.84rem; font-weight: 600;
+      cursor: pointer;
+    }
     .status-badge {
       display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px;
       border-radius: 999px; font-size: 0.85rem; font-weight: 600;
-      background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3);
+      background: var(--badge-off-bg); color: var(--badge-off-text); border: 1px solid var(--badge-off-border);
     }
     .status-badge.connected {
-      background: rgba(34, 197, 94, 0.15); color: #86efac; border-color: rgba(34, 197, 94, 0.3);
+      background: var(--badge-on-bg); color: var(--badge-on-text); border-color: var(--badge-on-border);
     }
     .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
 
-    /* Nodes Grid */
     .nodes-grid {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
       gap: 16px; margin-bottom: 18px;
@@ -61,19 +97,20 @@
     .node-title { font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; }
     .node-pill {
       font-size: 0.75rem; padding: 2px 9px; border-radius: 999px; font-weight: 600;
-      background: rgba(148, 163, 184, 0.15); color: var(--muted);
+      background: rgba(148, 163, 184, 0.18); color: var(--muted);
     }
-    .node-pill.online { background: rgba(34, 197, 94, 0.18); color: #86efac; }
+    .node-pill.online { background: var(--badge-on-bg); color: var(--badge-on-text); }
     .node-meta { font-size: 0.78rem; color: var(--muted); }
 
     .metrics-grid {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;
     }
+    @media (max-width: 480px) { .metrics-grid { grid-template-columns: 1fr; } }
     .metric-box {
       background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px;
     }
     .metric-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
-    .metric-val { font-size: 1.45rem; font-weight: 700; }
+    .metric-val { font-size: 1.35rem; font-weight: 700; }
     .metric-sub { font-size: 0.74rem; color: var(--muted); margin-top: 3px; }
     .temp-color { color: var(--orange); }
     .humi-color { color: var(--accent); }
@@ -81,14 +118,13 @@
     .air-mid { color: var(--yellow); }
     .air-bad { color: var(--red); }
 
-    /* LED Control Bar */
     .led-bar {
       display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
       background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;
     }
     .led-info { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; font-weight: 600; }
     .led-bulb {
-      width: 14px; height: 14px; border-radius: 50%; background: #475569;
+      width: 14px; height: 14px; border-radius: 50%; background: #94a3b8;
       transition: all 0.25s;
     }
     .led-bulb.on {
@@ -96,11 +132,10 @@
     }
     .led-actions { display: flex; align-items: center; gap: 8px; }
 
-    /* Toggle Switch */
     .switch { position: relative; display: inline-block; width: 46px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider {
-      position: absolute; cursor: pointer; inset: 0; background: #475569;
+      position: absolute; cursor: pointer; inset: 0; background: #64748b;
       transition: 0.25s; border-radius: 24px;
     }
     .slider:before {
@@ -110,7 +145,21 @@
     input:checked + .slider { background: var(--green); }
     input:checked + .slider:before { transform: translateX(22px); }
 
-    /* Main Layout */
+    /* Chart Panel */
+    .chart-card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px; margin-bottom: 18px;
+    }
+    .chart-header {
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
+      gap: 10px; margin-bottom: 12px;
+    }
+    .chart-header h2 {
+      font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--accent); margin: 0;
+    }
+    .chart-wrap { position: relative; height: 280px; width: 100%; }
+
     .main-grid { display: grid; grid-template-columns: 340px 1fr; gap: 16px; }
     @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
 
@@ -133,14 +182,14 @@
       cursor: pointer; border: none; border-radius: 8px; padding: 8px 14px;
       font-size: 0.85rem; font-weight: 600; transition: opacity 0.2s;
     }
-    button:hover { opacity: 0.9; }
-    .btn-primary { background: var(--accent); color: #0f172a; }
+    button:hover:not(:disabled) { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: var(--accent-text); }
     .btn-danger { background: var(--red); color: white; }
     .btn-ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
     .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
-    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
-    /* Topic Tags */
     .topic-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     .topic-tag {
       display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem;
@@ -148,7 +197,6 @@
     }
     .topic-tag button { background: none; color: var(--red); padding: 0 2px; font-size: 0.9rem; }
 
-    /* Log Stream */
     .log-toolbar {
       display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
       gap: 8px; margin-bottom: 12px;
@@ -158,31 +206,31 @@
       background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
       height: 520px; overflow-y: auto; padding: 10px; font-family: monospace; font-size: 0.83rem;
     }
-    .log-item {
-      border-bottom: 1px solid rgba(51, 65, 85, 0.6); padding: 8px 6px;
-    }
+    .log-item { border-bottom: 1px solid var(--border); padding: 8px 6px; }
     .log-item:last-child { border-bottom: none; }
     .log-meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.76rem; margin-bottom: 4px; }
     .log-topic { color: var(--accent); font-weight: 700; }
-    .log-payload { white-space: pre-wrap; word-break: break-all; color: #e2e8f0; }
+    .log-payload { white-space: pre-wrap; word-break: break-all; color: var(--text); }
   </style>
 </head>
 <body>
 <div class="container">
   <header>
-    <h1>📡 MQTT Live Monitor & ESP32-C Dual Node</h1>
-    <div id="connBadge" class="status-badge">
-      <span class="dot"></span>
-      <span id="connText">Chưa kết nối</span>
+    <h1>MQTT Live Monitor & ESP32 Dual Node</h1>
+    <div class="header-actions">
+      <button id="themeToggle" class="theme-btn" onclick="toggleTheme()">☀️ Giao diện Sáng</button>
+      <div id="connBadge" class="status-badge">
+        <span class="dot"></span>
+        <span id="connText">Chưa kết nối</span>
+      </div>
     </div>
   </header>
-  <!-- DASHBOARD 2 MODULE ESP32-C (DHT20 + MQ-135 + LED) -->
   <section class="nodes-grid">
     <!-- NODE 1 -->
     <div class="node-card">
       <div class="node-header">
         <div class="node-title">
-          <span>ESP32-C Node 1</span>
+          <span>ESP32 Node 1</span>
           <span id="n1-status" class="node-pill">Offline</span>
         </div>
         <div id="n1-meta" class="node-meta">WiFi: -- dBm | Uptime: --s</div>
@@ -224,7 +272,7 @@
     <div class="node-card">
       <div class="node-header">
         <div class="node-title">
-          <span>ESP32-C Node 2</span>
+          <span>ESP32 Node 2</span>
           <span id="n2-status" class="node-pill">Offline</span>
         </div>
         <div id="n2-meta" class="node-meta">WiFi: -- dBm | Uptime: --s</div>
@@ -263,7 +311,21 @@
     </div>
   </section>
 
-  <!-- KHU VỰC CẤU HÌNH & LUỒNG LOG -->
+  <!-- BIỂU ĐỒ THEO DÕI THỜI GIAN THỰC -->
+  <section class="chart-card">
+    <div class="chart-header">
+      <h2>Biểu đồ biến thiên cảm biến (30 mẫu gần nhất)</h2>
+      <div class="btn-row">
+        <button id="btnChartN1" class="btn-primary btn-sm" onclick="switchChartNode('node1')">ESP32 Node 1</button>
+        <button id="btnChartN2" class="btn-ghost btn-sm" onclick="switchChartNode('node2')">ESP32 Node 2</button>
+        <button class="btn-ghost btn-sm" onclick="clearChartHistory()">Xóa đồ thị</button>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="sensorChart"></canvas>
+    </div>
+  </section>
+
   <div class="main-grid">
     <aside>
       <div class="card">
@@ -324,10 +386,115 @@
   let subscribedTopics = JSON.parse(localStorage.getItem('mqtt_topics_v2')) || ['esp32c/#'];
   const lastSeen = { node1: 0, node2: 0 };
 
+  // Lưu lịch sử biểu đồ cho từng Node (tối đa 30 điểm)
+  const MAX_POINTS = 30;
+  let activeChartNode = 'node1';
+  const chartHistory = {
+    node1: { labels: [], temp: [], humi: [], air: [] },
+    node2: { labels: [], temp: [], humi: [], air: [] }
+  };
+
+  // Khởi tạo biểu đồ Chart.js
+  const ctx = document.getElementById('sensorChart').getContext('2d');
+  const sensorChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Nhiệt độ (°C)',
+          data: [],
+          borderColor: '#f97316',
+          backgroundColor: 'rgba(249, 115, 22, 0.15)',
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 3
+        },
+        {
+          label: 'Độ ẩm (%)',
+          data: [],
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56, 189, 248, 0.15)',
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 3
+        },
+        {
+          label: 'Không khí MQ-135 (%)',
+          data: [],
+          borderColor: '#22c55e',
+          backgroundColor: 'rgba(34, 197, 94, 0.15)',
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 3
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 250 },
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.12)' } },
+        y: { beginAtZero: true, max: 100, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.12)' } }
+      },
+      plugins: {
+        legend: { labels: { color: '#f1f5f9', usePointStyle: true } }
+      }
+    }
+  });
+
+  function updateChartTheme(isLight) {
+    const textColor = isLight ? '#334155' : '#94a3b8';
+    const legendColor = isLight ? '#0f172a' : '#f1f5f9';
+    const gridColor = isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(148, 163, 184, 0.12)';
+    sensorChart.options.scales.x.ticks.color = textColor;
+    sensorChart.options.scales.y.ticks.color = textColor;
+    sensorChart.options.scales.x.grid.color = gridColor;
+    sensorChart.options.scales.y.grid.color = gridColor;
+    sensorChart.options.plugins.legend.labels.color = legendColor;
+    sensorChart.update('none');
+  }
+
+  function syncChartDisplay() {
+    const h = chartHistory[activeChartNode];
+    sensorChart.data.labels = h.labels;
+    sensorChart.data.datasets[0].data = h.temp;
+    sensorChart.data.datasets[1].data = h.humi;
+    sensorChart.data.datasets[2].data = h.air;
+    sensorChart.update();
+  }
+
+  function switchChartNode(nodeKey) {
+    activeChartNode = nodeKey;
+    document.getElementById('btnChartN1').className = nodeKey === 'node1' ? 'btn-primary btn-sm' : 'btn-ghost btn-sm';
+    document.getElementById('btnChartN2').className = nodeKey === 'node2' ? 'btn-primary btn-sm' : 'btn-ghost btn-sm';
+    syncChartDisplay();
+  }
+
+  function clearChartHistory() {
+    chartHistory[activeChartNode] = { labels: [], temp: [], humi: [], air: [] };
+    syncChartDisplay();
+  }
+
+  function applyTheme(theme) {
+    const isLight = theme === 'light';
+    document.body.classList.toggle('light-theme', isLight);
+    document.getElementById('themeToggle').textContent = isLight ? '🌙 Giao diện Tối' : '☀️ Giao diện Sáng';
+    updateChartTheme(isLight);
+  }
+
+  function toggleTheme() {
+    const nextTheme = document.body.classList.contains('light-theme') ? 'dark' : 'light';
+    localStorage.setItem('mqtt_theme', nextTheme);
+    applyTheme(nextTheme);
+  }
+
+  applyTheme(localStorage.getItem('mqtt_theme') || 'dark');
   document.getElementById('clientId').value = 'WebClient-' + Math.random().toString(16).substring(2, 8);
   renderTopics();
 
-  // Kiểm tra trạng thái Online/Offline mỗi 3 giây (quá 15s không có gói tin -> Offline)
   setInterval(() => {
     const now = Date.now();
     ['node1', 'node2'].forEach((node, idx) => {
@@ -348,13 +515,8 @@
     const text = document.getElementById('connText');
     document.getElementById('btnConnect').disabled = connected;
     document.getElementById('btnDisconnect').disabled = !connected;
-    if (connected) {
-      badge.classList.add('connected');
-      text.textContent = 'Đã kết nối Broker';
-    } else {
-      badge.classList.remove('connected');
-      text.textContent = 'Chưa kết nối';
-    }
+    badge.classList.toggle('connected', connected);
+    text.textContent = connected ? 'Đã kết nối Broker' : 'Chưa kết nối';
   }
 
   function connectMqtt() {
@@ -405,6 +567,7 @@
     stEl.classList.add('online');
 
     if (topic.endsWith('/sensor/data')) {
+      const timeStr = new Date().toLocaleTimeString('vi-VN');
       if (data.temp !== undefined) document.getElementById(prefix + '-temp').textContent = data.temp + ' °C';
       if (data.humi !== undefined) document.getElementById(prefix + '-humi').textContent = data.humi + ' %';
       if (data.air_quality !== undefined) {
@@ -419,10 +582,27 @@
       if (data.mq135_raw !== undefined) {
         document.getElementById(prefix + '-raw').textContent = `ADC: ${data.mq135_raw} / 4095`;
       }
-      document.getElementById(prefix + '-time').textContent = 'Cập nhật: ' + new Date().toLocaleTimeString('vi-VN');
+      document.getElementById(prefix + '-time').textContent = 'Cập nhật: ' + timeStr;
       const rssi = data.wifi_rssi !== undefined ? data.wifi_rssi : '--';
       const up = data.uptime_s !== undefined ? data.uptime_s : '--';
       document.getElementById(prefix + '-meta').textContent = `WiFi: ${rssi} dBm | Uptime: ${up}s`;
+
+      // Đẩy dữ liệu vào biểu đồ của Node tương ứng
+      const hist = chartHistory[nodeKey];
+      hist.labels.push(timeStr);
+      hist.temp.push(data.temp !== undefined ? Number(data.temp) : null);
+      hist.humi.push(data.humi !== undefined ? Number(data.humi) : null);
+      hist.air.push(data.air_quality !== undefined ? Number(data.air_quality) : null);
+
+      if (hist.labels.length > MAX_POINTS) {
+        hist.labels.shift();
+        hist.temp.shift();
+        hist.humi.shift();
+        hist.air.shift();
+      }
+      if (activeChartNode === nodeKey) {
+        syncChartDisplay();
+      }
     }
 
     if (topic.endsWith('/status') && data.led !== undefined) {
@@ -433,8 +613,7 @@
   function updateLedUI(prefix, isOn) {
     document.getElementById(prefix + '-toggle').checked = isOn;
     document.getElementById(prefix + '-led-text').textContent = isOn ? 'ĐANG BẬT' : 'TẮT';
-    const bulb = document.getElementById(prefix + '-bulb');
-    if (isOn) bulb.classList.add('on'); else bulb.classList.remove('on');
+    document.getElementById(prefix + '-bulb').classList.toggle('on', isOn);
   }
 
   function toggleLed(nodeKey, checked) {
@@ -443,8 +622,7 @@
 
   function sendLedCmd(nodeKey, val) {
     if (!client || !client.connected) return alert('Bạn chưa kết nối MQTT Broker!');
-    const topic = `esp32c/${nodeKey}/control`;
-    client.publish(topic, JSON.stringify({ led: val }));
+    client.publish(`esp32c/${nodeKey}/control`, JSON.stringify({ led: val }));
   }
 
   function addTopic() {
