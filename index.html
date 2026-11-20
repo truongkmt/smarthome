@@ -14,11 +14,38 @@
       --text: #f1f5f9;
       --muted: #94a3b8;
       --accent: #38bdf8;
+      --accent-text: #0f172a;
       --green: #22c55e;
       --yellow: #eab308;
       --red: #ef4444;
       --orange: #f97316;
-      --purple: #a855f7;
+      --badge-off-bg: rgba(239, 68, 68, 0.15);
+      --badge-off-text: #fca5a5;
+      --badge-off-border: rgba(239, 68, 68, 0.3);
+      --badge-on-bg: rgba(34, 197, 94, 0.15);
+      --badge-on-text: #86efac;
+      --badge-on-border: rgba(34, 197, 94, 0.3);
+    }
+
+    body.light-theme {
+      --bg: #f1f5f9;
+      --panel: #ffffff;
+      --panel-2: #f8fafc;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --muted: #475569;
+      --accent: #0284c7;
+      --accent-text: #ffffff;
+      --green: #16a34a;
+      --yellow: #ca8a04;
+      --red: #dc2626;
+      --orange: #ea580c;
+      --badge-off-bg: rgba(220, 38, 38, 0.12);
+      --badge-off-text: #b91c1c;
+      --badge-off-border: rgba(220, 38, 38, 0.28);
+      --badge-on-bg: rgba(22, 163, 74, 0.12);
+      --badge-on-text: #15803d;
+      --badge-on-border: rgba(22, 163, 74, 0.28);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -172,6 +199,8 @@
   <header>
     <h1>📡 MQTT Live Monitor & ESP32-C Dual Node</h1>
     <div id="connBadge" class="status-badge">
+      <button id="themeToggle" class="theme-btn" onclick="toggleTheme()">☀️ Giao diện Sáng</button>
+      <div id="connBadge" class="status-badge">
       <span class="dot"></span>
       <span id="connText">Chưa kết nối</span>
     </div>
@@ -503,6 +532,33 @@
       </div>`;
     }).join('');
   }
+  function updateChartTheme(isLight) {
+  const textColor = isLight ? '#334155' : '#94a3b8';
+  const legendColor = isLight ? '#0f172a' : '#f1f5f9';
+  const gridColor = isLight ? 'rgba(15, 23, 42, 0.08)' : 'rgba(148, 163, 184, 0.12)';
+  sensorChart.options.scales.x.ticks.color = textColor;
+  sensorChart.options.scales.y.ticks.color = textColor;
+  sensorChart.options.scales.x.grid.color = gridColor;
+  sensorChart.options.scales.y.grid.color = gridColor;
+  sensorChart.options.plugins.legend.labels.color = legendColor;
+  sensorChart.update('none');
+}
+
+function applyTheme(theme) {
+  const isLight = theme === 'light';
+  document.body.classList.toggle('light-theme', isLight);
+  document.getElementById('themeToggle').textContent = isLight ? '🌙 Giao diện Tối' : '☀️ Giao diện Sáng';
+  updateChartTheme(isLight);
+}
+
+function toggleTheme() {
+  const nextTheme = document.body.classList.contains('light-theme') ? 'dark' : 'light';
+  localStorage.setItem('mqtt_theme', nextTheme);
+  applyTheme(nextTheme);
+}
+
+// Đổi 'dark' thành 'light' nếu muốn mặc định mở trang là giao diện sáng
+applyTheme(localStorage.getItem('mqtt_theme') || 'dark');  
 </script>
 </body>
 </html>
