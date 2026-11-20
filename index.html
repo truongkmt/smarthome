@@ -237,14 +237,14 @@
       </div>
       <div class="metrics-grid">
         <div class="metric-box">
-          <div class="metric-label">Nhiệt độ</div>
+          <div class="metric-label">Nhiệt độ (DHT20)</div>
           <div id="n1-temp" class="metric-val temp-color">-- °C</div>
           <div id="n1-time" class="metric-sub">Chưa có dữ liệu</div>
         </div>
         <div class="metric-box">
-          <div class="metric-label">Độ ẩm</div>
+          <div class="metric-label">Độ ẩm (DHT20)</div>
           <div id="n1-humi" class="metric-val humi-color">-- %</div>
-          <div class="metric-sub">DHT20</div>
+          <div class="metric-sub">Cảm biến I2C</div>
         </div>
         <div class="metric-box">
           <div class="metric-label">Không khí (MQ-135)</div>
@@ -568,15 +568,16 @@
 
     if (topic.endsWith('/sensor/data')) {
       const timeStr = new Date().toLocaleTimeString('vi-VN');
-      if (data.temp !== undefined) document.getElementById(prefix + '-temp').textContent = Number(data.temp).toFixed(1) + ' °C';
-      if (data.humi !== undefined) document.getElementById(prefix + '-humi').textContent = Number(data.humi).toFixed(1) + ' %';
+       if (data.temp !== undefined) document.getElementById(prefix + '-temp').textContent = data.temp + ' °C';
+      if (data.humi !== undefined) document.getElementById(prefix + '-humi').textContent = data.humi + ' %';
       if (data.air_quality !== undefined) {
         const airEl = document.getElementById(prefix + '-air');
         const pct = Number(data.air_quality);
+        let label = 'Tốt';
         airEl.className = 'metric-val air-good';
-        if (pct > 60) { airEl.className = 'metric-val air-bad'; }
-        else if (pct > 35) { airEl.className = 'metric-val air-mid'; }
-        airEl.textContent = pct + ' %';
+        if (pct > 60) { label = 'Ô nhiễm'; airEl.className = 'metric-val air-bad'; }
+        else if (pct > 35) { label = 'Trung bình'; airEl.className = 'metric-val air-mid'; }
+        airEl.textContent = `${pct}% (${label})`;
       }
       if (data.mq135_raw !== undefined) {
         document.getElementById(prefix + '-raw').textContent = `ADC: ${data.mq135_raw} / 4095`;
