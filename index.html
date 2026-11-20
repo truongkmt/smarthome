@@ -576,7 +576,7 @@
         airEl.className = 'metric-val air-good';
         if (pct > 60) { airEl.className = 'metric-val air-bad'; }
         else if (pct > 35) { airEl.className = 'metric-val air-mid'; }
-        airEl.textContent = `${pct}%`;
+        airEl.textContent = pct + ' %';
       }
       if (data.mq135_raw !== undefined) {
         document.getElementById(prefix + '-raw').textContent = `ADC: ${data.mq135_raw} / 4095`;
