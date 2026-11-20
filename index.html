@@ -47,7 +47,7 @@
       --badge-on-text: #15803d;
       --badge-on-border: rgba(22, 163, 74, 0.28);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+- { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
@@ -351,8 +351,9 @@
   let client = null;
   let isPaused = false;
   let logs = [];
-  let subscribedTopics = JSON.parse(localStorage.getItem('mqtt_topics_v2')) || ['esp32c/#'];
+  let subscribedTopics = JSON.parse(localStorage.getItem('mqtt_topics_v2')) || ['esp32c/#', 'esp32dev/#'];
   const lastSeen = { node1: 0, node2: 0 };
+  const nodePrefixMap = { node1: 'esp32c/node1', node2: 'esp32dev/node2' };
 
   document.getElementById('clientId').value = 'WebClient-' + Math.random().toString(16).substring(2, 8);
   renderTopics();
@@ -425,9 +426,15 @@
 
     let prefix = null;
     let nodeKey = null;
-    if (topic.startsWith('esp32c/node1/')) { prefix = 'n1'; nodeKey = 'node1'; }
-    else if (topic.startsWith('esp32c/node2/')) { prefix = 'n2'; nodeKey = 'node2'; }
-    else return;
+    if (topic.startsWith('esp32c/node1/') || topic.startsWith('esp32dev/node1/')) {
+      prefix = 'n1';
+      nodeKey = 'node1';
+      nodePrefixMap.node1 = topic.startsWith('esp32dev/node1/') ? 'esp32dev/node1' : 'esp32c/node1';
+    } else if (topic.startsWith('esp32c/node2/') || topic.startsWith('esp32dev/node2/')) {
+      prefix = 'n2';
+      nodeKey = 'node2';
+      nodePrefixMap.node2 = topic.startsWith('esp32dev/node2/') ? 'esp32dev/node2' : 'esp32c/node2';
+    } else return;
 
     lastSeen[nodeKey] = Date.now();
     const stEl = document.getElementById(prefix + '-status');
@@ -473,7 +480,7 @@
 
   function sendLedCmd(nodeKey, val) {
     if (!client || !client.connected) return alert('Bạn chưa kết nối MQTT Broker!');
-    const topic = `esp32c/${nodeKey}/control`;
+    const topic = `${nodePrefixMap[nodeKey] || `esp32c/${nodeKey}`}/control`;
     client.publish(topic, JSON.stringify({ led: val }));
   }
 
